@@ -1,62 +1,32 @@
-// 点群ノード (TF2方式)。
-//   /scan (LaserScan) と、首振りの動的TFから、FAST-LIO2に渡せる点群 (/points) を作る。
-//
-// 処理:
-//   1. 1回転分のスキャンについて、スキャン内の (tf_samples_per_scan + 1) 点の時刻でTFを取得する
-//   2. 各点の時刻に合わせて、そのTFの間を補間して(回転は球面補間、位置は線形補間)、座標を変換する
-//   3. frames_per_cloud 回転分をためて、1つの点群にまとめ、各点に time と ring を付ける
-//
-// 制約 (必ず読むこと):
-//   - 点ごとの時刻は、time_increment から求める。0の場合は scan_time / 点数 で代用する。
-//     これは、実際の各点の測定時刻と一致するとは限らない。
-//   - TFは指令値ベースの推定角度であり、実測値ではない。
-//   - スキャンの時刻のTFがまだ届いていない場合は、tf_timeout まで待ち、超えたら捨てる
-//     (最新のTFで代用はしない)。
-//
-// 動作確認はしていません。
-
 #include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <cstdint>
 #include <deque>
+#include <functional>
 #include <memory>
 #include <string>
-#include <vector>
+#include <utility>
 
 #include "builtin_interfaces/msg/time.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
+#include "laser_geometry/laser_geometry.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
-#include "sensor_msgs/msg/point_field.hpp"
-#include "sensor_msgs/point_cloud2_iterator.hpp"
-#include "tf2/LinearMath/Quaternion.h"
-#include "tf2/LinearMath/Transform.h"
-#include "tf2/LinearMath/Vector3.h"
-#include "tf2/exceptions.h"
 #include "tf2/time.h"
+#include "tf2_sensor_msgs/tf2_sensor_msgs.hpp"
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/transform_listener.h"
 
-#include "nodding_lidar/geometry.hpp"
-
 namespace
 {
-
-struct CloudPoint
-{
-  double t;  // 絶対時刻 [s]
-  float x, y, z;
-  float intensity;
-  uint16_t ring;
-};
 
 struct PendingScan
 {
   sensor_msgs::msg::LaserScan::ConstSharedPtr scan;
   double t0;         // スキャン開始時刻 [s]
-  double scan_time;  // 1回転の時間 [s]
+  double duration;   // 推定したスキャン時間 [s]
+  std::chrono::steady_clock::time_point received;
 };
 
 double to_sec(const builtin_interfaces::msg::Time & t)
@@ -64,16 +34,43 @@ double to_sec(const builtin_interfaces::msg::Time & t)
   return static_cast<double>(t.sec) + static_cast<double>(t.nanosec) * 1e-9;
 }
 
+builtin_interfaces::msg::Time to_msg_time(double sec)
+{
+  const int64_t nanoseconds = static_cast<int64_t>(sec * 1e9);
+  int64_t seconds = nanoseconds / 1000000000LL;
+  int64_t remainder = nanoseconds % 1000000000LL;
+  if (remainder < 0) {
+    --seconds;
+    remainder += 1000000000LL;
+  }
+  builtin_interfaces::msg::Time stamp;
+  stamp.sec = static_cast<int32_t>(seconds);
+  stamp.nanosec = static_cast<uint32_t>(remainder);
+  return stamp;
+}
+
 tf2::TimePoint to_tf_time(double sec)
 {
   return tf2::TimePoint(std::chrono::nanoseconds(static_cast<int64_t>(sec * 1e9)));
 }
 
-tf2::Transform to_tf2(const geometry_msgs::msg::TransformStamped & m)
+bool same_layout(
+  const sensor_msgs::msg::PointCloud2 & lhs,
+  const sensor_msgs::msg::PointCloud2 & rhs)
 {
-  const auto & q = m.transform.rotation;
-  const auto & t = m.transform.translation;
-  return tf2::Transform(tf2::Quaternion(q.x, q.y, q.z, q.w), tf2::Vector3(t.x, t.y, t.z));
+  if (lhs.point_step != rhs.point_step || lhs.fields.size() != rhs.fields.size()) {
+    return false;
+  }
+  for (size_t i = 0; i < lhs.fields.size(); ++i) {
+    const auto & a = lhs.fields[i];
+    const auto & b = rhs.fields[i];
+    if (a.name != b.name || a.offset != b.offset || a.datatype != b.datatype ||
+      a.count != b.count)
+    {
+      return false;
+    }
+  }
+  return true;
 }
 
 }  // namespace
@@ -86,22 +83,21 @@ public:
   {
     scan_topic_ = declare_parameter<std::string>("scan_topic", "/scan");
     cloud_topic_ = declare_parameter<std::string>("cloud_topic", "/points");
-    output_frame_ = declare_parameter<std::string>("output_frame", "servo_link");
+    output_frame_ = declare_parameter<std::string>("output_frame", "base_link");
+    fixed_frame_ = declare_parameter<std::string>("fixed_frame", "odom");
     lidar_frame_ = declare_parameter<std::string>("lidar_frame", "");  // 空なら /scan の frame_id
 
-    frames_per_cloud_ = declare_parameter<int>("frames_per_cloud", 4);
-    tf_samples_ = declare_parameter<int>("tf_samples_per_scan", 8);
+    frames_per_cloud_ = declare_parameter<int>("frames_per_cloud", 15);
     tf_timeout_ = declare_parameter<double>("tf_timeout", 0.1);
     tf_cache_sec_ = declare_parameter<double>("tf_cache_sec", 5.0);
 
     default_scan_time_ = declare_parameter<double>("default_scan_time", 1.0 / 15.0);
     stamp_is_scan_end_ = declare_parameter<bool>("stamp_is_scan_end", false);
     reverse_time_order_ = declare_parameter<bool>("reverse_time_order", false);
-    max_frame_duration_ = declare_parameter<double>("max_frame_duration", 0.5);
+    max_frame_duration_ = declare_parameter<double>("max_frame_duration", 2.0);
     reliable_output_ = declare_parameter<bool>("reliable_output", true);
 
     frames_per_cloud_ = std::max(1, frames_per_cloud_);
-    tf_samples_ = std::max(1, tf_samples_);
 
     tf_buffer_ = std::make_unique<tf2_ros::Buffer>(
       get_clock(), tf2::durationFromSec(tf_cache_sec_));
@@ -123,9 +119,9 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "scan_to_cloud 開始: %s -> %s (出力フレーム=%s, %d回転/フレーム, TF補間=%d区間)",
+      "scan_to_cloud started: %s -> %s (frame=%s, %d scans/cloud, laser_geometry)",
       scan_topic_.c_str(), cloud_topic_.c_str(), output_frame_.c_str(),
-      frames_per_cloud_, tf_samples_);
+      frames_per_cloud_);
   }
 
 private:
@@ -133,10 +129,21 @@ private:
   {
     PendingScan item;
     item.scan = scan;
-    item.scan_time = scan->scan_time >
-      0.0 ? static_cast<double>(scan->scan_time) : default_scan_time_;
+    item.duration = std::isfinite(scan->scan_time) && scan->scan_time > 0.0 ?
+      static_cast<double>(scan->scan_time) : default_scan_time_;
+    if (std::isfinite(scan->time_increment) && scan->time_increment > 0.0F) {
+      item.duration = std::max(
+        item.duration,
+        static_cast<double>(scan->time_increment) * static_cast<double>(scan->ranges.size()));
+    }
     const double stamp = to_sec(scan->header.stamp);
-    item.t0 = stamp_is_scan_end_ ? stamp - item.scan_time : stamp;
+    item.t0 = stamp_is_scan_end_ ? stamp - item.duration : stamp;
+    item.received = std::chrono::steady_clock::now();
+    if (scan->ranges.empty() || scan->header.frame_id.empty()) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 2000, "Ignoring LaserScan with no ranges or frame_id");
+      return;
+    }
     pending_.push_back(item);
     process_pending();
   }
@@ -148,191 +155,167 @@ private:
       const PendingScan & item = pending_.front();
       const std::string src =
         lidar_frame_.empty() ? item.scan->header.frame_id : lidar_frame_;
-      const double t_end = item.t0 + item.scan_time;
+      const double t_end = item.t0 + item.duration;
 
       std::string err;
-      if (!tf_buffer_->canTransform(output_frame_, src, to_tf_time(t_end), &err)) {
-        if (now().seconds() - t_end > tf_timeout_) {
+      if (!tf_buffer_->canTransform(fixed_frame_, src, to_tf_time(t_end), &err)) {
+        const double waited = std::chrono::duration<double>(
+          std::chrono::steady_clock::now() - item.received).count();
+        if (waited > tf_timeout_) {
           RCLCPP_WARN_THROTTLE(
             get_logger(), *get_clock(), 2000,
-            "TFを取得できないため、スキャンを捨てました (%s <- %s, %.2f秒待ちました): %s",
-            output_frame_.c_str(), src.c_str(), tf_timeout_, err.c_str());
+            "Dropping scan: TF unavailable (%s <- %s) after %.2f s: %s",
+            fixed_frame_.c_str(), src.c_str(), waited, err.c_str());
           pending_.pop_front();
           continue;
         }
-        break;  // まだ待つ
+        break;
       }
 
       std::string err0;
-      if (!tf_buffer_->canTransform(output_frame_, src, to_tf_time(item.t0), &err0)) {
-        RCLCPP_WARN_THROTTLE(
-          get_logger(), *get_clock(), 2000,
-          "スキャン開始時刻のTFがありません (TFのbufferより古い可能性): %s", err0.c_str());
-        pending_.pop_front();
-        continue;
+      if (!tf_buffer_->canTransform(fixed_frame_, src, to_tf_time(item.t0), &err0)) {
+        const double waited = std::chrono::duration<double>(
+          std::chrono::steady_clock::now() - item.received).count();
+        if (waited > tf_timeout_) {
+          RCLCPP_WARN_THROTTLE(
+            get_logger(), *get_clock(), 2000,
+            "Dropping scan: start-time TF unavailable (%s <- %s): %s",
+            fixed_frame_.c_str(), src.c_str(), err0.c_str());
+          pending_.pop_front();
+          continue;
+        }
+        break;
       }
 
-      if (convert_scan(item, src)) {
-        ++frames_in_buffer_;
-        if (frames_in_buffer_ >= frames_per_cloud_) {
-          publish_cloud();
-        }
-      }
+      convert_scan(item, src);
       pending_.pop_front();
     }
   }
 
-  // 1回転分のスキャンを、出力フレームの3D点にして buffer_ に積む
+  // laser_geometry interpolates the TF over the acquisition interval.
   bool convert_scan(const PendingScan & item, const std::string & src)
   {
-    const sensor_msgs::msg::LaserScan & scan = *item.scan;
+    sensor_msgs::msg::LaserScan scan = *item.scan;
+    scan.header.frame_id = src;
+    scan.header.stamp = to_msg_time(item.t0);
+    if (!std::isfinite(scan.time_increment) || scan.time_increment <= 0.0F) {
+      scan.time_increment = static_cast<float>(
+        item.duration / static_cast<double>(scan.ranges.size()));
+    }
+    if (reverse_time_order_) {
+      std::reverse(scan.ranges.begin(), scan.ranges.end());
+      std::reverse(scan.intensities.begin(), scan.intensities.end());
+      scan.angle_min += static_cast<float>(scan.ranges.size() - 1) * scan.angle_increment;
+      scan.angle_max = scan.angle_min + static_cast<float>(scan.ranges.size() - 1) *
+        (-scan.angle_increment);
+      scan.angle_increment = -scan.angle_increment;
+    }
 
-    // スキャン内の (K+1) 個の時刻でTFを取得する
-    const int K = tf_samples_;
-    std::vector<tf2::Transform> T;
-    T.reserve(static_cast<size_t>(K) + 1);
-    try {
-      for (int k = 0; k <= K; ++k) {
-        const double tk = item.t0 + item.scan_time * static_cast<double>(k) /
-          static_cast<double>(K);
-        T.push_back(to_tf2(tf_buffer_->lookupTransform(output_frame_, src, to_tf_time(tk))));
+    // laser_geometry deskews each beam into a fixed frame. Then move the
+    // result into the robot frame at the beginning of this accumulated cloud,
+    // so scans collected while the base moves still form one rigid cloud.
+    if (frames_in_buffer_ > 0 && item.t0 - last_scan_t0_ > max_frame_duration_) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 2000,
+        "Dropping incomplete cloud after %.2f s scan gap", item.t0 - last_scan_t0_);
+      frames_in_buffer_ = 0;
+      accumulated_cloud_ = sensor_msgs::msg::PointCloud2();
+    }
+
+    if (frames_in_buffer_ == 0) {
+      reference_t0_ = item.t0;
+      try {
+        reference_transform_ = tf_buffer_->lookupTransform(
+          output_frame_, fixed_frame_,
+          rclcpp::Time(to_msg_time(reference_t0_), get_clock()->get_clock_type()));
+      } catch (const tf2::TransformException & e) {
+        RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 2000,
+          "Dropping scan: cannot get %s <- %s at reference time: %s",
+          output_frame_.c_str(), fixed_frame_.c_str(), e.what());
+        return false;
       }
+    }
+
+    sensor_msgs::msg::PointCloud2 cloud;
+    try {
+      projector_.transformLaserScanToPointCloud(
+        fixed_frame_, scan, cloud, *tf_buffer_, -1.0,
+        laser_geometry::channel_option::Default);
     } catch (const tf2::TransformException & e) {
       RCLCPP_WARN_THROTTLE(
-        get_logger(), *get_clock(), 2000, "TFの取得に失敗したため、スキャンを捨てました: %s", e.what());
+        get_logger(), *get_clock(), 2000, "Dropping scan: laser_geometry TF lookup failed: %s",
+        e.what());
       return false;
     }
 
-    // 古い未完成のフレームは捨てる (スキャンが途切れた場合)
-    if (!buffer_.empty() && item.t0 - buffer_t0_ > max_frame_duration_) {
+    if (cloud.width == 0 || cloud.data.empty()) {
+      return true;
+    }
+
+    if (frames_in_buffer_ > 0 && !same_layout(accumulated_cloud_, cloud)) {
       RCLCPP_WARN_THROTTLE(
         get_logger(), *get_clock(), 2000,
-        "スキャンの間隔が空いたため、未完成のフレームを捨てました (%.2f秒)", item.t0 - buffer_t0_);
-      buffer_.clear();
+        "Dropping incomplete cloud because PointCloud2 layouts changed");
       frames_in_buffer_ = 0;
-    }
-    if (buffer_.empty()) {
-      buffer_t0_ = item.t0;
-    }
-
-    const size_t n = scan.ranges.size();
-    const bool has_intensity = scan.intensities.size() == n;
-
-    for (size_t i = 0; i < n; ++i) {
-      const double r = scan.ranges[i];
-      if (!std::isfinite(r) || r < scan.range_min || r > scan.range_max) {
-        continue;
+      accumulated_cloud_ = sensor_msgs::msg::PointCloud2();
+      reference_t0_ = item.t0;
+      try {
+        reference_transform_ = tf_buffer_->lookupTransform(
+          output_frame_, fixed_frame_,
+          rclcpp::Time(to_msg_time(reference_t0_), get_clock()->get_clock_type()));
+      } catch (const tf2::TransformException & e) {
+        RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 2000,
+          "Dropping scan after cloud layout change: cannot get reference transform: %s",
+          e.what());
+        return false;
       }
+    }
 
-      const double offset = nodding_lidar::point_time_offset(
-        i, n, static_cast<double>(scan.time_increment), item.scan_time, reverse_time_order_);
+    sensor_msgs::msg::PointCloud2 cloud_in_reference;
+    tf2::doTransform(cloud, cloud_in_reference, reference_transform_);
+    cloud = std::move(cloud_in_reference);
 
-      int k = 0;
-      double frac = 0.0;
-      nodding_lidar::sample_segment(offset, item.scan_time, K, k, frac);
-
-      // 点の時刻に合わせて、前後のTFを補間する
-      const tf2::Quaternion q = T[static_cast<size_t>(k)].getRotation().slerp(
-        T[static_cast<size_t>(k) + 1].getRotation(), frac);
-      const tf2::Vector3 o = T[static_cast<size_t>(k)].getOrigin().lerp(
-        T[static_cast<size_t>(k) + 1].getOrigin(), frac);
-      const tf2::Transform Ti(q, o);
-
-      // LiDARのフレーム内の点 (センサの高さは、TFの平行移動に含まれる)
-      const double a = scan.angle_min + static_cast<double>(i) * scan.angle_increment;
-      const tf2::Vector3 p_out = Ti * tf2::Vector3(r * std::cos(a), r * std::sin(a), 0.0);
-
-      CloudPoint p;
-      p.t = item.t0 + offset;
-      p.x = static_cast<float>(p_out.x());
-      p.y = static_cast<float>(p_out.y());
-      p.z = static_cast<float>(p_out.z());
-      p.intensity = has_intensity ? scan.intensities[i] : 0.0f;
-      p.ring = static_cast<uint16_t>(frames_in_buffer_);
-      buffer_.push_back(p);
+    if (frames_in_buffer_ == 0) {
+      accumulated_cloud_ = cloud;
+    } else {
+      accumulated_cloud_.data.insert(
+        accumulated_cloud_.data.end(), cloud.data.begin(), cloud.data.end());
+      accumulated_cloud_.width += cloud.width;
+      accumulated_cloud_.row_step = accumulated_cloud_.width * accumulated_cloud_.point_step;
+      accumulated_cloud_.is_dense = accumulated_cloud_.is_dense && cloud.is_dense;
+    }
+    last_scan_t0_ = item.t0;
+    ++frames_in_buffer_;
+    if (frames_in_buffer_ >= frames_per_cloud_) {
+      cloud_pub_->publish(accumulated_cloud_);
+      frames_in_buffer_ = 0;
+      accumulated_cloud_ = sensor_msgs::msg::PointCloud2();
     }
     return true;
   }
 
-  // buffer_ の点を、1つのPointCloud2にして送る
-  void publish_cloud()
-  {
-    if (buffer_.empty()) {
-      frames_in_buffer_ = 0;
-      return;
-    }
-
-    std::sort(
-      buffer_.begin(), buffer_.end(),
-      [](const CloudPoint & a, const CloudPoint & b) {return a.t < b.t;});
-    const double t_start = buffer_.front().t;
-
-    sensor_msgs::msg::PointCloud2 msg;
-    msg.header.stamp = rclcpp::Time(static_cast<int64_t>(t_start * 1e9), RCL_ROS_TIME);
-    msg.header.frame_id = output_frame_;
-    msg.height = 1;
-    msg.width = static_cast<uint32_t>(buffer_.size());
-    msg.is_bigendian = false;
-    msg.is_dense = true;
-
-    auto add_field = [&msg](const std::string & name, uint32_t offset, uint8_t type) {
-        sensor_msgs::msg::PointField f;
-        f.name = name;
-        f.offset = offset;
-        f.datatype = type;
-        f.count = 1;
-        msg.fields.push_back(f);
-      };
-    add_field("x", 0, sensor_msgs::msg::PointField::FLOAT32);
-    add_field("y", 4, sensor_msgs::msg::PointField::FLOAT32);
-    add_field("z", 8, sensor_msgs::msg::PointField::FLOAT32);
-    add_field("intensity", 12, sensor_msgs::msg::PointField::FLOAT32);
-    add_field("ring", 16, sensor_msgs::msg::PointField::UINT16);
-    add_field("time", 20, sensor_msgs::msg::PointField::FLOAT32);
-    msg.point_step = 24;
-    msg.row_step = msg.point_step * msg.width;
-    msg.data.resize(static_cast<size_t>(msg.row_step));
-
-    sensor_msgs::PointCloud2Iterator<float> it_x(msg, "x");
-    sensor_msgs::PointCloud2Iterator<float> it_y(msg, "y");
-    sensor_msgs::PointCloud2Iterator<float> it_z(msg, "z");
-    sensor_msgs::PointCloud2Iterator<float> it_i(msg, "intensity");
-    sensor_msgs::PointCloud2Iterator<uint16_t> it_r(msg, "ring");
-    sensor_msgs::PointCloud2Iterator<float> it_t(msg, "time");
-
-    for (const auto & p : buffer_) {
-      *it_x = p.x;
-      *it_y = p.y;
-      *it_z = p.z;
-      *it_i = p.intensity;
-      *it_r = p.ring;
-      *it_t = static_cast<float>(p.t - t_start);  // フレーム先頭からの経過秒
-      ++it_x; ++it_y; ++it_z; ++it_i; ++it_r; ++it_t;
-    }
-
-    cloud_pub_->publish(msg);
-    buffer_.clear();
-    frames_in_buffer_ = 0;
-  }
-
   // パラメータ
-  std::string scan_topic_, cloud_topic_, output_frame_, lidar_frame_;
-  int frames_per_cloud_{4};
-  int tf_samples_{8};
+  std::string scan_topic_, cloud_topic_, output_frame_, fixed_frame_, lidar_frame_;
+  int frames_per_cloud_{15};
   double tf_timeout_{0.1};
   double tf_cache_sec_{5.0};
   double default_scan_time_{1.0 / 15.0};
   bool stamp_is_scan_end_{false};
   bool reverse_time_order_{false};
-  double max_frame_duration_{0.5};
+  double max_frame_duration_{2.0};
   bool reliable_output_{true};
 
   // 状態
+  laser_geometry::LaserProjection projector_;
   std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   std::deque<PendingScan> pending_;
-  std::vector<CloudPoint> buffer_;
-  double buffer_t0_{0.0};
+  sensor_msgs::msg::PointCloud2 accumulated_cloud_;
+  geometry_msgs::msg::TransformStamped reference_transform_;
+  double reference_t0_{0.0};
+  double last_scan_t0_{0.0};
   int frames_in_buffer_{0};
 
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;

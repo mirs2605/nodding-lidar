@@ -3,7 +3,7 @@
 <package format="3">
   <name>nodding_lidar</name>
   <version>0.0.1</version>
-  <description>首振り2D LiDARの角度ノードと、FAST-LIO2形式の3D点群を作るパッケージ</description>
+  <description>首振り2D LiDARからRTAB-Map ICP用の3D点群を生成するパッケージ</description>
   <maintainer email="6kam465@gmail.com">6kam</maintainer>
   <license>Apache-2.0</license>
 
@@ -13,11 +13,15 @@
   <depend>builtin_interfaces</depend>
   <depend>sensor_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>laser_geometry</depend>
   <depend>tf2</depend>
   <depend>tf2_ros</depend>
+  <depend>tf2_sensor_msgs</depend>
 
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
+  <exec_depend>mirs</exec_depend>
+  <exec_depend>rtabmap_slam</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
