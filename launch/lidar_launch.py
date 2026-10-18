@@ -5,7 +5,7 @@ LiDAR自体 (sllidar_ros2) は、既存の起動ファイルで起動するこ�
 sllidar_ros2 の frame_id は、このパッケージの child_frame (lidar_link) に合わせること。
 
 使い方の例:
-  ros2 launch nodding_lidar nodding_lidar.launch.py use_hardware:=false
+  ros2 launch nodding_lidar lidar_launch.py use_hardware:=false
 """
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument

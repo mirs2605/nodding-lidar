@@ -22,13 +22,18 @@ def generate_launch_description():
             'lidar_port': LaunchConfiguration('lidar_port'),
             'lidar_baudrate': LaunchConfiguration('lidar_baudrate'),
             'lidar_frame': lidar_frame,
+            'map': LaunchConfiguration('map'),
             'use_sim_time': LaunchConfiguration('use_sim_time'),
             'enable_lidar': LaunchConfiguration('enable_lidar'),
+            'scan_safety_stop_distance': LaunchConfiguration('scan_safety_stop_distance'),
+            'scan_safety_resume_distance': LaunchConfiguration('scan_safety_resume_distance'),
+            'scan_safety_forward_angle': LaunchConfiguration('scan_safety_forward_angle'),
             'enable_parameter_publisher': LaunchConfiguration('enable_parameter_publisher'),
             'enable_micro_ros': LaunchConfiguration('enable_micro_ros'),
             # The EKF provides odom -> base_footprint for scan deskewing and
             # is the sole local-odometry TF publisher in this bringup.
             'enable_ekf_local': 'true',
+            'enable_static_base_link_to_imu_link_tf': 'true',
             'enable_rviz': LaunchConfiguration('enable_rviz'),
             'enable_nav2': LaunchConfiguration('enable_nav2'),
             # RTAB-Map replaces slam_toolbox here to avoid competing map->odom TFs.
@@ -42,7 +47,7 @@ def generate_launch_description():
     nodding_lidar = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution([
-                FindPackageShare('nodding_lidar'), 'launch', 'nodding_lidar.launch.py']),
+                FindPackageShare('nodding_lidar'), 'launch', 'lidar_launch.py']),
         ),
         launch_arguments={
             'enable_nodding_lidar': enable_nodding_lidar,
@@ -91,8 +96,14 @@ def generate_launch_description():
         DeclareLaunchArgument('lidar_baudrate', default_value='256000'),
         DeclareLaunchArgument('servo_angle_port', default_value='/dev/ttyACM0'),
         DeclareLaunchArgument('lidar_frame', default_value='laser'),
+        DeclareLaunchArgument(
+            'map', default_value=PathJoinSubstitution([
+                FindPackageShare('mirs'), 'maps', 'es.yaml'])),
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('enable_lidar', default_value='true'),
+        DeclareLaunchArgument('scan_safety_stop_distance', default_value='0.35'),
+        DeclareLaunchArgument('scan_safety_resume_distance', default_value='0.50'),
+        DeclareLaunchArgument('scan_safety_forward_angle', default_value='30.0'),
         DeclareLaunchArgument('enable_parameter_publisher', default_value='true'),
         DeclareLaunchArgument('enable_micro_ros', default_value='true'),
         DeclareLaunchArgument('enable_rviz', default_value='false'),

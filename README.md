@@ -2,7 +2,7 @@
 
 首振り式2D LiDARのスキャンを、時刻ごとのTFで変換して `/points` に出すROS 2 Jazzyパッケージです。
 MIRS本体と首振りLiDARをまとめて起動する場合は、このパッケージの
-`nodding_bringup.launch.py` を使います。RTAB-Mapを使う場合は
+`bringup_launch.py` を使います。RTAB-Mapを使う場合は
 `enable_rtabmap:=true` を指定してください。この起動構成ではMIRSのEKFを有効にし、
 `/odometry/local` をRTAB-Mapへ渡します。SLAM Toolboxとは同時起動しません。
 
@@ -25,7 +25,7 @@ base_footprint → base_link → servo_link → laser
                               static        dynamic
 ```
 
-`nodding_bringup.launch.py` は、首振りを有効にするとMIRSの `base_link → laser` 静的TFを停止します。代わりに `base_link → servo_link` を静的配信し、Uno角度から `servo_link → laser` を配信します。これにより同じTFを複数ノードから配信しません。首振りを無効にした場合はMIRS既定の静的TFを使います。
+`bringup_launch.py` は、首振りを有効にするとMIRSの `base_link → laser` 静的TFを停止します。代わりに `base_link → servo_link` を静的配信し、Uno角度から `servo_link → laser` を配信します。これにより同じTFを複数ノードから配信しません。首振りを無効にした場合はMIRS既定の静的TFを使います。
 
 既定の `base_to_servo_z=0.12945 m` は、MIRS既存設定のLiDAR高さ `0.1745 m` と、以前のLiDARオフセット `lidar_height=0.04505 m` から計算した暫定値です。機械図面や実測で確認した値ではありません。回転軸の位置、サーボ中央角度、正方向、LiDARの軸からのオフセットは、実機に合わせて調整してください。起動引数 `base_to_servo_{x,y,z,roll,pitch,yaw}` とパラメータ `lidar_height`、`center_angle_deg`、`angle_sign` で設定できます。
 
@@ -39,14 +39,14 @@ cd ~/ws
 colcon build --symlink-install --packages-select nodding_lidar mirs
 source install/setup.bash
 
-ros2 launch nodding_lidar nodding_bringup.launch.py \
+ros2 launch nodding_lidar bringup_launch.py \
   enable_nodding_lidar:=true \
   enable_rtabmap:=true \
   servo_angle_port:=/dev/ttyACM0
 ```
 
-`nodding_bringup.launch.py` はMIRSの `mirs_launch.py` とこのパッケージの
-`nodding_lidar.launch.py` をincludeします。MIRS側のLiDAR起動引数 `lidar_frame` と
+`bringup_launch.py` はMIRSの `mirs_launch.py` とこのパッケージの
+`lidar_launch.py` をincludeします。MIRS側のLiDAR起動引数 `lidar_frame` と
 サーボTFの `child_frame` は既定で `laser` です。
 `enable_nodding_lidar:=false` にすると首振り関連ノードを起動せず、MIRS既定の静的LiDAR TFを使います。
 `enable_lidar:=false` にするとLiDARドライバーも起動しません。
@@ -54,7 +54,7 @@ ros2 launch nodding_lidar nodding_bringup.launch.py \
 MIRSを起動せず首振り機能だけを起動する場合は、LiDARノードと親フレームTFを別途用意してください。
 
 ```bash
-ros2 launch nodding_lidar nodding_lidar.launch.py \
+ros2 launch nodding_lidar lidar_launch.py \
   enable_nodding_lidar:=true \
   servo_serial_port:=/dev/ttyACM0
 ```
@@ -74,7 +74,7 @@ pio run -e uno --target upload
 - `laser_geometry::LaserProjection::transformLaserScanToPointCloud` を使い、各スキャンの点を固定フレーム (`fixed_frame`, 既定 `odom`) に時刻補正して投影します。その後、蓄積開始時刻の `base_link` に戻すため、複数スキャンの点群は同じロボット姿勢を基準に揃います。`odom -> base_link` とサーボTFの両方が測定時刻をカバーする必要があります。
 - 範囲外、NaNなどの無効な距離値は `laser_geometry` により点群から除外されます。
 - `time_increment` が0の場合は `scan_time`（なければ `default_scan_time`）から点間時間を推定します。この推定値は実測点時刻とは限りません。
-- `/scan` のstampが終了時刻なら `stamp_is_scan_end` を有効にし、配列方向と時間方向が逆なら `reverse_time_order` を有効にしてください。S1ドライバがどちらを使うか、実機またはドライバ仕様で確認してください。
+- `/scan` のstampが終了時刻なら `stamp_is_scan_end` を有効にし、配列方向と時間方向が逆なら `reverse_time_order` を有効にしてください。使用するLiDARドライバがどちらを使うか、実機またはドライバ仕様で確認してください。
 - 必要な時刻のTFが `tf_timeout` 内に得られないスキャンは警告を出して破棄します。最新TFで置き換えません。
 - `frames_per_cloud` スキャンを蓄積してからpublishします。出力点群は蓄積開始時刻の `base_link` 座標です。RTAB-Mapの `icp_odometry` / `rtabmap` で `scan_cloud` として使う場合、両ノードの `frame_id` を `base_link` に合わせます。蓄積時間の分だけ点群出力が遅れるため、Nav2の即時衝突回避には現在の `/scan` を引き続き使ってください。
 - `/points` はRTAB-MapのICP用PointCloud2です。FAST-LIO2固有の `ring` や点ごとのtimestamp形式を出力するものではありません。
