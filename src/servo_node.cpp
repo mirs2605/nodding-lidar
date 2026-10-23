@@ -44,7 +44,7 @@ public:
     joint_name_ = declare_parameter<std::string>("joint_name", "nodding_joint");
     parent_frame_ = declare_parameter<std::string>("parent_frame", "servo_link");
     child_frame_ = declare_parameter<std::string>("child_frame", "lidar_link");
-    lidar_height_ = declare_parameter<double>("lidar_height", 0.04505);
+    lidar_height_ = declare_parameter<double>("lidar_height", 0.0325);
     publish_tf_ = declare_parameter<bool>("publish_tf", true);
 
     // --- サーボ / PCA9685 ---

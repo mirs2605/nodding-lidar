@@ -21,7 +21,9 @@
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>mirs</exec_depend>
+  <exec_depend>sllidar_ros2</exec_depend>
   <exec_depend>rtabmap_slam</exec_depend>
+  <exec_depend>rviz2</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

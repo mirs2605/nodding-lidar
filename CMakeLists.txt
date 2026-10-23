@@ -43,7 +43,7 @@ ament_target_dependencies(scan_to_cloud
 install(TARGETS servo_node serial_angle_bridge servo_tf_node scan_to_cloud
   DESTINATION lib/${PROJECT_NAME})
 
-install(DIRECTORY launch config
+install(DIRECTORY launch config rviz
   DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)

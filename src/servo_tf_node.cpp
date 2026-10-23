@@ -25,7 +25,7 @@ public:
     joint_name_ = declare_parameter<std::string>("joint_name", "nodding_joint");
     parent_frame_ = declare_parameter<std::string>("parent_frame", "servo_link");
     child_frame_ = declare_parameter<std::string>("child_frame", "laser");
-    lidar_height_ = declare_parameter<double>("lidar_height", 0.04505);
+    lidar_height_ = declare_parameter<double>("lidar_height", 0.0325);
     state_timeout_sec_ = declare_parameter<double>("state_timeout_sec", 0.5);
     if (state_timeout_sec_ <= 0.0) {
       throw std::invalid_argument("state_timeout_sec must be positive");
@@ -99,7 +99,7 @@ private:
   std::string joint_name_;
   std::string parent_frame_;
   std::string child_frame_;
-  double lidar_height_{0.04505};
+  double lidar_height_{0.0325};
   double state_timeout_sec_{0.5};
   bool have_state_{false};
   std::chrono::steady_clock::time_point last_state_time_;

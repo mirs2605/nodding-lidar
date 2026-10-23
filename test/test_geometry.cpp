@@ -26,7 +26,7 @@ static double deg(double d) {return d * kPi / 180.0;}
 
 int main()
 {
-  const double h = 0.04505;
+  const double h = 0.0325;
 
   // 1. 回転角0度: 前方1mの点は (1, 0, h)
   {
@@ -34,10 +34,10 @@ int main()
     check(near(p.x, 1.0) && near(p.y, 0.0) && near(p.z, h), "phi=0 forward point");
   }
 
-  // 2. 回転角15度: 前方1mの点は (0.9776, 0, -0.2153)。正の角度で前方が下がる。
+  // 2. 回転角15度: 前方1mの点は (0.9743, 0, -0.2274)。正の角度で前方が下がる。
   {
     const Vec3 p = project_point(1.0, 0.0, deg(15.0), h);
-    check(near(p.x, 0.9776) && near(p.y, 0.0) && near(p.z, -0.2153), "phi=15deg forward point");
+    check(near(p.x, 0.9743) && near(p.y, 0.0) && near(p.z, -0.2274), "phi=15deg forward point");
     check(p.z < 0.0, "positive angle lowers the front");
   }
 
