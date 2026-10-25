@@ -1,0 +1,45 @@
+name: ROS 2 colcon test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  colcon-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ros-tooling/setup-ros@v0.7
+        with:
+          required-ros-distributions: jazzy
+
+      - name: Install package dependencies
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          rosdep update
+          rosdep install \
+            --from-paths . \
+            --ignore-src \
+            --rosdistro jazzy \
+            --skip-keys="mirs sllidar_ros2 rtabmap_slam rviz2" \
+            -r -y
+
+      - name: Create colcon workspace
+        run: mkdir -p "$RUNNER_TEMP/ros_ws"
+
+      - name: Build and test nodding_lidar
+        working-directory: ${{ runner.temp }}/ros_ws
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon build \
+            --base-paths "$GITHUB_WORKSPACE" \
+            --packages-select nodding_lidar \
+            --event-handlers console_direct+
+          source install/setup.bash
+          colcon test \
+            --base-paths "$GITHUB_WORKSPACE" \
+            --packages-select nodding_lidar \
+            --event-handlers console_direct+
+          colcon test-result --verbose

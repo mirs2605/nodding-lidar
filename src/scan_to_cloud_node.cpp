@@ -368,7 +368,7 @@ private:
     sensor_msgs::msg::PointCloud2 cloud;
     cloud.header.frame_id = fixed_frame_;
     cloud.header.stamp = to_msg_time(item.t0);
-    sensor_msgs::msg::PointCloud2Modifier modifier(cloud);
+    sensor_msgs::PointCloud2Modifier modifier(cloud);
     if (has_intensity) {
       modifier.setPointCloud2Fields(
         4, "x", 1, sensor_msgs::msg::PointField::FLOAT32,
@@ -379,12 +379,12 @@ private:
       modifier.setPointCloud2FieldsByString(1, "xyz");
     }
     modifier.resize(points.size());
-    sensor_msgs::msg::PointCloud2Iterator<float> x_iter(cloud, "x");
-    sensor_msgs::msg::PointCloud2Iterator<float> y_iter(cloud, "y");
-    sensor_msgs::msg::PointCloud2Iterator<float> z_iter(cloud, "z");
-    std::unique_ptr<sensor_msgs::msg::PointCloud2Iterator<float>> intensity_iter;
+    sensor_msgs::PointCloud2Iterator<float> x_iter(cloud, "x");
+    sensor_msgs::PointCloud2Iterator<float> y_iter(cloud, "y");
+    sensor_msgs::PointCloud2Iterator<float> z_iter(cloud, "z");
+    std::unique_ptr<sensor_msgs::PointCloud2Iterator<float>> intensity_iter;
     if (has_intensity) {
-      intensity_iter = std::make_unique<sensor_msgs::msg::PointCloud2Iterator<float>>(
+      intensity_iter = std::make_unique<sensor_msgs::PointCloud2Iterator<float>>(
         cloud, "intensity");
     }
     for (const auto & point : points) {

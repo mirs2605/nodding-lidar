@@ -45,6 +45,46 @@ ros2 launch nodding_lidar bringup_launch.py \
   servo_angle_port:=/dev/ttyACM0
 ```
 
+`slam_launch.py` / `bringup_launch.py` / `nav_launch.py` は実機専用です。
+MIRSのmicro-ROS AgentとEKFを起動し、実機の `/odom` とセンサーを使用します。
+ファームウェアのROS Domain IDは `90` なので、実機用launchは次の環境で起動します。
+
+```bash
+export ROS_DOMAIN_ID=90
+ros2 launch nodding_lidar slam_launch.py
+```
+
+Gazeboではこのlaunchを使わず、`simulation` パッケージのlaunchを使います。
+Gazebo側はROS Domain ID `91` を使うため、実機用AgentやEKFとTF・センサーtopicが混線しません。
+
+## 3D 地図の作成と保存
+
+`slam_launch.py` はRTAB-Mapの3Dモードで起動し、RVizに `/cloud_map` と
+現在の `/points` を表示します。RTAB-MapのセッションDBは既定で
+`~/.ros/mirs_3d.db` に保存されます。別の地図を新規に作るときは、異なる
+`database_path` を指定してください。
+
+```bash
+ros2 launch nodding_lidar slam_launch.py \
+  servo_angle_port:=/dev/ttyACM0 \
+  database_path:=$HOME/.ros/mirs_3d.db
+```
+
+地図作成を止めてDBが閉じられた後、点群地図をPCDとして書き出せます。
+`<workspace>` はこのリポジトリのワークスペースのパスに置き換えます。
+
+```bash
+mkdir -p <workspace>/src/original/mirs/maps/3d
+rtabmap-export --scan --voxel 0.05 \
+  --output gazebo_3d.pcd \
+  --output_dir <workspace>/src/original/mirs/maps/3d \
+  $HOME/.ros/mirs_3d.db
+```
+
+`gazebo.yaml` と `gazebo.pgm` は既存の2D占有地図として残し、3D点群は
+`maps/3d/gazebo_3d.pcd` に分けて保存します。RTAB-Map DBは姿勢グラフと
+センサーデータを含む編集・再処理用の元データ、PCDは統合済み3D点群です。
+
 `bringup_launch.py` はMIRSの `mirs_launch.py` とこのパッケージの
 `lidar_launch.py` をincludeします。MIRS側のLiDAR起動引数 `lidar_frame` と
 サーボTFの `child_frame` は既定で `laser` です。
@@ -77,7 +117,7 @@ pio run -e uno --target upload
 - S1ドライバの `LaserScan` は点ごとの実測時刻を含まず、`time_increment` をスキャン時間と点数から作ります。角度補償で点が並べ替えられるため、各点に割り当てる時刻とサーボ角度は推定値です。実機で壁などの形状を確認してください。
 - `/scan` のstampが終了時刻なら `stamp_is_scan_end` を有効にし、配列方向と時間方向が逆なら `reverse_time_order` を有効にしてください。使用するLiDARドライバがどちらを使うか、実機またはドライバ仕様で確認してください。
 - 必要な時刻のTFが `tf_timeout` 内に得られないスキャンは警告を出して破棄します。最新TFで置き換えません。
-- 1回の `/scan` から1個の `/points` をpublishします。各ビームの測定時刻に対応するサーボ角度と車体TFを使い、スキャン開始時刻の `base_link` 座標に揃えます。S1が10 Hzでスキャンを出せば、欠測やTF待ちがない場合の点群出力も10 Hzです。1個の点群が首振りの全範囲を含むわけではありません。RTAB-Mapの `icp_odometry` / `rtabmap` で `scan_cloud` として使う場合、両ノードの `frame_id` を `base_link` に合わせます。
+- 1回の `/scan` から1個の `/points` をpublishします。各ビームの測定時刻に対応するサーボ角度と車体TFを使い、スキャン開始時刻の `base_link` 座標に揃えます。S1が10 Hzでスキャンを出せば、欠測やTF待ちがない場合の点群出力も10 Hzです。1個の点群が首振りの全範囲を含むわけではありません。RTAB-Mapで `scan_cloud` として使う場合、`frame_id` を `base_link` に合わせます。
 - `/points` はRTAB-MapのICP用PointCloud2です。FAST-LIO2固有の `ring` や点ごとのtimestamp形式を出力するものではありません。
 - 現在のRTAB-Map統合はMIRSのEKFオドメトリをICPの初期推定として使う構成です。RTAB-MapとEKFのTF競合を避けるため、RTAB-Map側はロボット姿勢TFを直接配信せず、SLAM補正の `map → odom` を配信します。
 
