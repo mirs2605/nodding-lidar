@@ -159,10 +159,10 @@ ros2 launch nodding_lidar slam_launch.py \
 `<workspace>` はこのリポジトリのワークスペースのパスに置き換えます。
 
 ```bash
-mkdir -p <workspace>/src/original/mirs/maps/3d
+mkdir -p <workspace>/maps/real/3d
 rtabmap-export --scan --voxel 0.05 \
   --output gazebo_3d.pcd \
-  --output_dir <workspace>/src/original/mirs/maps/3d \
+  --output_dir <workspace>/maps/real/3d \
   $HOME/.ros/mirs_3d.db
 ```
 

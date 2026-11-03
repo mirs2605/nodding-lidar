@@ -303,7 +303,7 @@ Gazeboの入力変換と真値取得は `simulation` に置く。
 - 実機の時刻・取付設定：`../config/nodding_lidar.yaml`（本書からの相対パス）
 - 実機のRTAB-Map設定：`../config/rtabmap.yaml`（本書からの相対パス）
 - 実機SLAMの接続：`../launch/slam_launch.py`（本書からの相対パス）
-- シミュレーションの接続：`../../simulation/simulation/launch/simulation_launch.py`（本書からの相対パス）
+- シミュレーションの接続：`../../simulation/launch/simulation_launch.py`（本書からの相対パス）
 - 全体の地図・地面分離・走行設計：`../../../../RTABMAP_GROUND_SEGMENTATION_NAV2_DESIGN.md`（本書からの相対パス）
 
 - [RTAB-Mapの点群蓄積と出力基準時刻の実装](https://github.com/introlab/rtabmap_ros/blob/ros2/rtabmap_util/src/nodelets/point_cloud_assembler.cpp)
