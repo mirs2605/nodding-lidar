@@ -1,4 +1,4 @@
-"""Launch the LiDAR driver, servo, point cloud, and RViz nodes."""
+"""LiDARドライバ、サーボ制御、点群生成、RVizのノードを起動する。"""
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
@@ -16,7 +16,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             'enable_nodding_lidar', default_value='true',
-            description='首振りLiDARと点群生成ノードを起動する'),
+            description='首振り2D LiDARと点群生成ノードを起動する'),
         DeclareLaunchArgument(
             'use_pca9685', default_value='false',
             description='true にするとシリアル入力の代わりにPCA9685サーボ指令ノードを使う'),
@@ -64,6 +64,7 @@ def generate_launch_description():
             name='serial_angle_bridge',
             output='screen',
             parameters=[params, {
+                'use_sim_time': LaunchConfiguration('use_sim_time'),
                 'serial_port': LaunchConfiguration('servo_serial_port'),
             }],
             condition=IfCondition(PythonExpression([
@@ -78,6 +79,7 @@ def generate_launch_description():
             name='servo_tf_node',
             output='screen',
             parameters=[params, {
+                'use_sim_time': LaunchConfiguration('use_sim_time'),
                 'child_frame': LaunchConfiguration('lidar_frame'),
             }],
             condition=IfCondition(PythonExpression([
@@ -93,6 +95,7 @@ def generate_launch_description():
             output='screen',
             parameters=[
                 params,
+                {'use_sim_time': LaunchConfiguration('use_sim_time')},
                 {'use_hardware': ParameterValue(
                     LaunchConfiguration('use_hardware'), value_type=bool)},
                 {'child_frame': LaunchConfiguration('lidar_frame')},
@@ -109,6 +112,7 @@ def generate_launch_description():
             name='scan_to_cloud',
             output='screen',
             parameters=[params, {
+                'use_sim_time': LaunchConfiguration('use_sim_time'),
                 'fixed_frame': LaunchConfiguration('fixed_frame'),
             }],
             condition=IfCondition(LaunchConfiguration('enable_nodding_lidar')),

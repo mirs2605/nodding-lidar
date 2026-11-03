@@ -1,4 +1,4 @@
-"""Bring up MIRS with optional nodding LiDAR support."""
+"""機体の制御を起動し、設定に応じて首振り2D LiDARを有効にする。"""
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
@@ -68,6 +68,18 @@ def generate_launch_description():
         condition=IfCondition(enable_nodding_lidar),
     )
 
+    matching_cloud = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(PathJoinSubstitution([
+            FindPackageShare('nodding_lidar'), 'launch', 'matching_cloud_launch.py'])),
+        launch_arguments={
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
+            'motion_cloud_config': LaunchConfiguration('motion_cloud_config'),
+        }.items(),
+        condition=IfCondition(PythonExpression([
+            "'", enable_nodding_lidar, "' == 'true' and '",
+            LaunchConfiguration('enable_rtabmap'), "' == 'true'",
+        ])),
+    )
     rtabmap = Node(
         package='rtabmap_slam',
         executable='rtabmap',
@@ -77,23 +89,13 @@ def generate_launch_description():
             "'", enable_nodding_lidar, "' == 'true' and '",
             LaunchConfiguration('enable_rtabmap'), "' == 'true'",
         ])),
-        parameters=[{
-            'use_sim_time': LaunchConfiguration('use_sim_time'),
-            'frame_id': 'base_link',
-            'odom_frame_id': 'odom',
-            'map_frame_id': 'map',
-            'subscribe_odom': True,
-            'subscribe_scan_cloud': True,
-            'subscribe_rgb': False,
-            'subscribe_depth': False,
-            'subscribe_rgbd': False,
-            'approx_sync': True,
-            'wait_for_transform': 0.2,
-            'Reg/Strategy': '1',
-            'Grid/FromDepth': 'false',
-        }],
+        parameters=[
+            PathJoinSubstitution([
+                FindPackageShare('nodding_lidar'), 'config', 'rtabmap.yaml']),
+            {'use_sim_time': LaunchConfiguration('use_sim_time')},
+        ],
         remappings=[
-            ('scan_cloud', '/points'),
+            ('scan_cloud', '/points_matching'),
             ('odom', '/odometry/local'),
         ],
     )
@@ -110,6 +112,9 @@ def generate_launch_description():
             'map', default_value=PathJoinSubstitution([
                 FindPackageShare('mirs'), 'maps', 'es.yaml'])),
         DeclareLaunchArgument('use_sim_time', default_value='false'),
+        DeclareLaunchArgument(
+            'motion_cloud_config', default_value=PathJoinSubstitution([
+                FindPackageShare('nodding_lidar'), 'config', 'motion_cloud.yaml'])),
         DeclareLaunchArgument('enable_lidar', default_value='true'),
         DeclareLaunchArgument('scan_safety_stop_distance', default_value='0.35'),
         DeclareLaunchArgument('scan_safety_resume_distance', default_value='0.50'),
@@ -121,5 +126,6 @@ def generate_launch_description():
         DeclareLaunchArgument('base_to_servo_z', default_value='0.142'),
         mirs,
         nodding_lidar,
+        matching_cloud,
         rtabmap,
     ])

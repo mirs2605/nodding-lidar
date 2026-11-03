@@ -1,4 +1,4 @@
-"""Robot, EKF, nodding LiDAR and Nav2 using an existing static map."""
+"""機体の制御、EKFによる位置推定、首振り2D LiDAR、保存済み地図を使うNav2を起動する。"""
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource

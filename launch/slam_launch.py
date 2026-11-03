@@ -1,6 +1,6 @@
-"""Robot, EKF and RTAB-Map SLAM using the nodding LiDAR point cloud."""
+"""機体の制御とEKFによる位置推定を起動し、首振り2D LiDARの点群でRTAB-Mapの地図を作る。"""
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import EnvironmentVariable, LaunchConfiguration, PathJoinSubstitution
@@ -21,6 +21,8 @@ def generate_launch_description():
             'use_sim_time': LaunchConfiguration('use_sim_time'),
             'enable_lidar': 'false',
             'enable_ekf_local': 'true',
+            'enable_static_base_link_to_laser_tf': 'false',
+            'enable_static_base_link_to_imu_link_tf': 'true',
             'enable_rviz': 'false',
             'enable_nav2': 'false',
             'enable_slam_toolbox': 'false',
@@ -40,20 +42,21 @@ def generate_launch_description():
             'enable_rviz': 'false',
         }.items(),
     )
+    matching_cloud = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(PathJoinSubstitution([
+            FindPackageShare('nodding_lidar'), 'launch', 'matching_cloud_launch.py'])),
+        launch_arguments={
+            'use_sim_time': LaunchConfiguration('use_sim_time'),
+            'motion_cloud_config': LaunchConfiguration('motion_cloud_config'),
+        }.items(),
+    )
     rtabmap = Node(
         package='rtabmap_slam', executable='rtabmap', name='rtabmap',
-        output='screen', parameters=[{
-            'use_sim_time': use_sim_time,
-            'database_path': database_path,
-            'frame_id': 'base_link', 'odom_frame_id': '',
-            'odom_frame_id_init': 'odom',
-            'map_frame_id': 'map', 'subscribe_odom': True,
-            'subscribe_scan_cloud': True, 'subscribe_rgb': False,
-            'subscribe_depth': False, 'subscribe_rgbd': False,
-            'approx_sync': True, 'wait_for_transform': 0.2,
-            'Reg/Strategy': '1', 'Reg/Force3DoF': 'false',
-            'Grid/FromDepth': 'false', 'Grid/3D': 'true',
-        }], remappings=[('scan_cloud', '/points'), ('odom', '/odometry/local')],
+        output='screen', parameters=[
+            PathJoinSubstitution([
+                FindPackageShare('nodding_lidar'), 'config', 'rtabmap.yaml']),
+            {'use_sim_time': use_sim_time, 'database_path': database_path},
+        ], remappings=[('scan_cloud', '/points_matching'), ('odom', '/odometry/local')],
     )
     rviz = Node(
         package='rviz2', executable='rviz2', name='rtabmap_3d_rviz',
@@ -68,14 +71,19 @@ def generate_launch_description():
         DeclareLaunchArgument('servo_angle_port', default_value='/dev/ttyACM0'),
         DeclareLaunchArgument('lidar_baudrate', default_value='256000'),
         DeclareLaunchArgument('use_sim_time', default_value='false'),
+        DeclareLaunchArgument(
+            'motion_cloud_config', default_value=PathJoinSubstitution([
+                FindPackageShare('nodding_lidar'), 'config', 'motion_cloud.yaml'])),
         DeclareLaunchArgument('enable_rviz', default_value='true'),
         DeclareLaunchArgument(
             'database_path',
             default_value=PathJoinSubstitution([
                 EnvironmentVariable('HOME'), '.ros', 'mirs_3d.db']),
             description='RTAB-Map 3D mapping database'),
-        mirs,
-        nodding,
+        GroupAction(actions=[mirs], scoped=True),
+        # Keep the child RViz override from disabling the SLAM viewer.
+        GroupAction(actions=[nodding], scoped=True),
+        matching_cloud,
         rtabmap,
         rviz,
     ])
