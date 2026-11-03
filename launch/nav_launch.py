@@ -1,6 +1,11 @@
 """機体の制御、EKFによる位置推定、首振り2D LiDAR、保存済み地図を使うNav2を起動する。"""
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import (
+    DeclareLaunchArgument,
+    GroupAction,
+    IncludeLaunchDescription,
+    SetEnvironmentVariable,
+)
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
@@ -18,6 +23,9 @@ def generate_launch_description():
             'use_sim_time': LaunchConfiguration('use_sim_time'),
             'enable_lidar': 'false',
             'enable_ekf_local': 'true',
+            'enable_static_base_link_to_laser_tf': 'false',
+            'enable_static_base_link_to_imu_link_tf': 'true',
+            'enable_scan_safety': 'true',
             'enable_rviz': 'true',
             'enable_nav2': 'true',
             'enable_slam_toolbox': 'false',
@@ -38,6 +46,7 @@ def generate_launch_description():
         }.items(),
     )
     return LaunchDescription([
+        SetEnvironmentVariable("ROS_DOMAIN_ID", "90"),
         DeclareLaunchArgument('esp_port', default_value='/dev/ttyUSB1'),
         DeclareLaunchArgument('lidar_port', default_value='/dev/ttyUSB0'),
         DeclareLaunchArgument('servo_angle_port', default_value='/dev/ttyACM0'),
@@ -45,6 +54,6 @@ def generate_launch_description():
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('map', default_value=PathJoinSubstitution([
             FindPackageShare('mirs'), 'maps', 'es.yaml'])),
-        mirs,
-        nodding,
+        GroupAction(actions=[mirs], scoped=True),
+        GroupAction(actions=[nodding], scoped=True),
     ])

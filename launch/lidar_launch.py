@@ -1,6 +1,10 @@
 """LiDARドライバ、サーボ制御、点群生成、RVizのノードを起動する。"""
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import (
+    DeclareLaunchArgument,
+    IncludeLaunchDescription,
+    SetEnvironmentVariable,
+)
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
@@ -14,6 +18,7 @@ def generate_launch_description():
         [FindPackageShare('nodding_lidar'), 'config', 'nodding_lidar.yaml'])
 
     return LaunchDescription([
+        SetEnvironmentVariable("ROS_DOMAIN_ID", "90"),
         DeclareLaunchArgument(
             'enable_nodding_lidar', default_value='true',
             description='首振り2D LiDARと点群生成ノードを起動する'),

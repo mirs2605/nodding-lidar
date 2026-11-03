@@ -1,11 +1,30 @@
 """機体の制御を起動し、設定に応じて首振り2D LiDARを有効にする。"""
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import (
+    DeclareLaunchArgument,
+    GroupAction,
+    IncludeLaunchDescription,
+    OpaqueFunction,
+    SetEnvironmentVariable,
+)
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+
+
+def _validate_localization(context):
+    """AMCLとRTAB-Mapによるmap→odomの二重配信を起動前に拒否する。"""
+    def enabled(name):
+        value = LaunchConfiguration(name).perform(context).lower()
+        return value in ('true', '1', 'yes')
+
+    if enabled('enable_nav2') and enabled('enable_rtabmap'):
+        raise RuntimeError(
+            'bringup_launch: enable_nav2 and enable_rtabmap cannot both be true; '
+            'AMCL and RTAB-Map would both publish map -> odom')
+    return []
 
 
 def generate_launch_description():
@@ -24,6 +43,7 @@ def generate_launch_description():
             'lidar_frame': lidar_frame,
             'map': LaunchConfiguration('map'),
             'use_sim_time': LaunchConfiguration('use_sim_time'),
+            'enable_scan_safety': LaunchConfiguration('enable_lidar'),
             # lidar_launch.py owns the driver when nodding mode is enabled.
             'enable_lidar': PythonExpression([
                 "'", LaunchConfiguration('enable_lidar'), "' == 'true' and '",
@@ -101,6 +121,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        SetEnvironmentVariable("ROS_DOMAIN_ID", "90"),
         DeclareLaunchArgument('enable_nodding_lidar', default_value='true'),
         DeclareLaunchArgument('enable_rtabmap', default_value='false'),
         DeclareLaunchArgument('esp_port', default_value='/dev/ttyUSB1'),
@@ -124,8 +145,9 @@ def generate_launch_description():
         DeclareLaunchArgument('enable_rviz', default_value='false'),
         DeclareLaunchArgument('enable_nav2', default_value='false'),
         DeclareLaunchArgument('base_to_servo_z', default_value='0.142'),
-        mirs,
-        nodding_lidar,
+        OpaqueFunction(function=_validate_localization),
+        GroupAction(actions=[mirs], scoped=True),
+        GroupAction(actions=[nodding_lidar], scoped=True),
         matching_cloud,
         rtabmap,
     ])

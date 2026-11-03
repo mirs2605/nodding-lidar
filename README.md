@@ -288,3 +288,15 @@ ros2 topic hz /points_matching
 ```bash
 ros2 launch nodding_lidar matching_cloud_launch.py use_sim_time:=true
 ```
+
+
+### 実機launchの担当と同時起動
+
+実機用の入口launchはROS_DOMAIN_IDを90に設定します。Gazeboのsimulationは91を使います。
+同じ実機に対する`bringup_launch.py`、`nav_launch.py`、`slam_launch.py`、`standalone_slam_launch.py`は、用途に応じて一つだけ起動してください。
+`standalone_slam_launch.py`はLiDAR照合がodomのTFを配信するため、車輪用EKFを別に追加しないでください。
+
+`nav_launch.py`では、mirsがEKF・IMU取付TF・Nav2・安全ゲートを担当し、lidar_launchがLiDARドライバと首振りTFを担当します。
+固定のbase_link→laserは配信せず、base_link→servo_link→laserを使います。
+各includeの引数はGroupActionの範囲に閉じ、ドライバ停止指定やRViz設定を隣のincludeに引き継ぎません。
+`bringup_launch.py`で`enable_rtabmap`と`enable_nav2`を同時にtrueにすると、AMCLとRTAB-Mapがmap→odomを二重配信するため起動を拒否します。

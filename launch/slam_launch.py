@@ -1,6 +1,11 @@
 """機体の制御とEKFによる位置推定を起動し、首振り2D LiDARの点群でRTAB-Mapの地図を作る。"""
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
+from launch.actions import (
+    DeclareLaunchArgument,
+    GroupAction,
+    IncludeLaunchDescription,
+    SetEnvironmentVariable,
+)
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import EnvironmentVariable, LaunchConfiguration, PathJoinSubstitution
@@ -66,6 +71,7 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('enable_rviz')),
     )
     return LaunchDescription([
+        SetEnvironmentVariable("ROS_DOMAIN_ID", "90"),
         DeclareLaunchArgument('esp_port', default_value='/dev/ttyUSB1'),
         DeclareLaunchArgument('lidar_port', default_value='/dev/ttyUSB0'),
         DeclareLaunchArgument('servo_angle_port', default_value='/dev/ttyACM0'),

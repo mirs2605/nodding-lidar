@@ -1,6 +1,11 @@
 """LiDARの点群同士を照合して移動量を求め、地図を作る。機体の制御やESP32接続は使用しない。"""
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
+from launch.actions import (
+    DeclareLaunchArgument,
+    GroupAction,
+    IncludeLaunchDescription,
+    SetEnvironmentVariable,
+)
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import EnvironmentVariable, LaunchConfiguration, PathJoinSubstitution
@@ -76,6 +81,7 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('enable_rviz')),
     )
     return LaunchDescription([
+        SetEnvironmentVariable("ROS_DOMAIN_ID", "90"),
         DeclareLaunchArgument('lidar_port', default_value='/dev/ttyUSB0'),
         DeclareLaunchArgument('servo_angle_port', default_value='/dev/ttyACM0'),
         DeclareLaunchArgument('lidar_baudrate', default_value='256000'),
