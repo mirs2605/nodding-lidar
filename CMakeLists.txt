@@ -13,6 +13,8 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(diagnostic_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(laser_geometry REQUIRED)
 find_package(tf2 REQUIRED)
@@ -40,10 +42,16 @@ target_include_directories(scan_to_cloud PRIVATE
 ament_target_dependencies(scan_to_cloud
   rclcpp builtin_interfaces sensor_msgs geometry_msgs laser_geometry tf2 tf2_ros tf2_sensor_msgs)
 
-install(TARGETS servo_node serial_angle_bridge servo_tf_node scan_to_cloud
+add_executable(motion_cloud_assembler src/motion_cloud_assembler.cpp)
+target_include_directories(motion_cloud_assembler PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+ament_target_dependencies(motion_cloud_assembler
+  rclcpp sensor_msgs nav_msgs diagnostic_msgs geometry_msgs tf2 tf2_ros)
+
+install(TARGETS servo_node serial_angle_bridge servo_tf_node scan_to_cloud motion_cloud_assembler
   DESTINATION lib/${PROJECT_NAME})
 
-install(DIRECTORY launch config
+install(DIRECTORY launch config rviz
   DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
@@ -52,6 +60,17 @@ if(BUILD_TESTING)
   target_include_directories(test_geometry PRIVATE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
   add_test(NAME test_geometry COMMAND test_geometry)
+
+  add_executable(test_motion_window test/test_motion_window.cpp)
+  target_include_directories(test_motion_window PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+  add_test(NAME test_motion_window COMMAND test_motion_window)
+
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  add_test(NAME test_motion_cloud_ros
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_motion_cloud_ros.py
+      $<TARGET_FILE:motion_cloud_assembler>)
+  set_tests_properties(test_motion_cloud_ros PROPERTIES TIMEOUT 35)
 
   add_executable(test_laser_projection test/test_laser_projection.cpp)
   ament_target_dependencies(test_laser_projection

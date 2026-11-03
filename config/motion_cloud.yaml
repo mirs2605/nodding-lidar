@@ -1,0 +1,17 @@
+# 調整開始用の値。実機の精度・遅延・点群形状を測定して採用値を決める。
+/**:
+  ros__parameters:
+    base_frame: base_link
+    fixed_frame: odom
+    max_window_s: 2.0
+    # 0.4 rad/sの旋回では、定速区間の保持時間の目安は0.5 s。
+    max_turn_span_rad: 0.2
+    max_motion_gap_s: 0.15
+    max_input_age_s: 1.0
+    tf_wait_s: 0.3
+    max_output_rate_hz: 2.0
+    voxel_size_m: 0.1
+    max_scans: 32
+    max_points: 200000
+    min_points: 100
+    max_pending_scans: 8

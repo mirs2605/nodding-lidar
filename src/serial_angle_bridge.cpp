@@ -77,12 +77,17 @@ private:
   {
     unsigned long device_time_ms = 0;
     double angle_deg = 0.0;
+    double velocity_deg_s = 0.0;
     char trailing = '\0';
-    if (std::sscanf(line.c_str(), "%lu,%lf%c", &device_time_ms, &angle_deg, &trailing) != 2 ||
-      !std::isfinite(angle_deg) || angle_deg < 0.0 || angle_deg > 180.0)
+    if (std::sscanf(
+        line.c_str(), "%lu,%lf,%lf%c", &device_time_ms, &angle_deg, &velocity_deg_s,
+        &trailing) != 3 || !std::isfinite(angle_deg) || angle_deg < 0.0 || angle_deg > 180.0 ||
+      !std::isfinite(velocity_deg_s))
     {
       RCLCPP_WARN_THROTTLE(
-        get_logger(), *get_clock(), 2000, "Ignoring invalid servo CSV line: '%s'", line.c_str());
+        get_logger(), *get_clock(), 2000,
+        "Ignoring invalid servo CSV line (expected timestamp,angle,angular_velocity): '%s'",
+        line.c_str());
       return;
     }
     (void)device_time_ms;
@@ -93,6 +98,8 @@ private:
     state.position = {
       angle_sign_ * (angle_deg - center_angle_deg_) *
       nodding_lidar::kPi / 180.0};
+    state.velocity = {
+      angle_sign_ * velocity_deg_s * nodding_lidar::kPi / 180.0};
     publisher_->publish(state);
   }
 

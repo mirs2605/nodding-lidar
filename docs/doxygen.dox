@@ -1,0 +1,133 @@
+/** @mainpage nodding_lidar
+
+LiDARの距離スキャンと首振り角度を組み合わせて三次元点群を作る。Arduinoからの角度受信、座標変換、SLAMと走行の起動を含む。
+
+@section motion_design 走行中の点群補償と自己位置推定の設計
+
+@ref nodding_motion_localization_design は、実機とシミュレーションで共通化する処理、時刻の制約、検証と採用条件を定義する。実装済みの処理と採用前に必要な実測検証を区別して参照する。
+
+docs/MOTION_LOCALIZATION_DESIGN.md: 点群の運動補償、旋回に応じた蓄積幅、RTAB-Mapへの接続と評価手順をまとめる設計資料。
+
+各ファイルの説明からソースと宣言を参照できる。C/C++・Arduino・Python・JavaはDoxygenで解析する。Dart・Kotlin・ROS型定義・シェルはソース掲載ページを使う。コメントのない関数も一覧に含むが、その動作が説明済みという意味ではない。
+
+@section source_list ファイル一覧
+
+- @ref include/nodding_lidar/motion_window.hpp "include/nodding_lidar/motion_window.hpp"
+
+- @ref src/motion_cloud_assembler.cpp "src/motion_cloud_assembler.cpp"
+
+- @ref launch/matching_cloud_launch.py "launch/matching_cloud_launch.py"
+
+- @ref test/test_motion_window.cpp "test/test_motion_window.cpp"
+
+- @ref test/test_motion_cloud_ros.py "test/test_motion_cloud_ros.py"
+
+- @ref include/nodding_lidar/geometry.hpp "include/nodding_lidar/geometry.hpp"
+
+- @ref include/nodding_lidar/pca9685.hpp "include/nodding_lidar/pca9685.hpp"
+
+- @ref launch/bringup_launch.py "launch/bringup_launch.py"
+
+- @ref launch/lidar_launch.py "launch/lidar_launch.py"
+
+- @ref launch/nav_launch.py "launch/nav_launch.py"
+
+- @ref launch/slam_launch.py "launch/slam_launch.py"
+
+- @ref launch/standalone_slam_launch.py "launch/standalone_slam_launch.py"
+
+- @ref src/laser_scan.cpp "src/laser_scan.cpp"
+
+- @ref src/scan_to_cloud_node.cpp "src/scan_to_cloud_node.cpp"
+
+- @ref src/serial_angle_bridge.cpp "src/serial_angle_bridge.cpp"
+
+- @ref src/servo_node.cpp "src/servo_node.cpp"
+
+- @ref src/servo_tf_node.cpp "src/servo_tf_node.cpp"
+
+- @ref test/test_geometry.cpp "test/test_geometry.cpp"
+
+- @ref test/test_laser_projection.cpp "test/test_laser_projection.cpp"
+
+*/
+
+/** @file include/nodding_lidar/geometry.hpp
+ * @brief 首振り角度と取付寸法を使い、LiDAR点を別の座標系へ変換する。
+ */
+
+/** @file include/nodding_lidar/pca9685.hpp
+ * @brief I2C経由でPCA9685のPWM出力を設定し、サーボへパルスを送る。
+ */
+
+/** @file launch/bringup_launch.py
+ * @brief 機体の制御を起動し、設定に応じて首振り2D LiDARを有効にする。
+ */
+
+/** @file launch/lidar_launch.py
+ * @brief LiDARドライバ、サーボ制御、点群生成、RVizのノードを起動する。
+ */
+
+/** @file launch/nav_launch.py
+ * @brief 機体の制御、EKFによる位置推定、首振り2D LiDAR、保存済み地図を使うNav2を起動する。
+ */
+
+/** @file launch/slam_launch.py
+ * @brief 機体の制御とEKFによる位置推定を起動し、首振り2D LiDARの点群でRTAB-Mapの地図を作る。
+ */
+
+/** @file launch/standalone_slam_launch.py
+ * @brief LiDARの点群同士を照合して移動量を求め、地図を作る。機体の制御やESP32接続は使用しない。
+ */
+
+/** @file src/laser_scan.cpp
+ * @brief LaserScanに含まれる距離データを受信して確認する。
+ */
+
+/** @file src/scan_to_cloud_node.cpp
+ * @brief 距離スキャンを首振り角度と機体の移動に合わせて三次元点群へ変換する。
+ */
+
+/** @file src/serial_angle_bridge.cpp
+ * @brief Arduinoのシリアル角度データをJointStateに変換して配信する。
+ */
+
+/** @file src/servo_node.cpp
+ * @brief 首振りの指令と推定角度を生成し、設定に応じてサーボ基板を駆動する。
+ */
+
+/** @file src/servo_tf_node.cpp
+ * @brief 首振り角度からLiDARの座標変換を配信する。
+ */
+
+/** @file test/test_geometry.cpp
+ * @brief 入力と期待する結果を比較し、対象処理の動作を確かめる試験。試験関数から確認条件を参照できる。
+ */
+
+/** @file test/test_laser_projection.cpp
+ * @brief 入力と期待する結果を比較し、対象処理の動作を確かめる試験。試験関数から確認条件を参照できる。
+ */
+
+/** @file include/nodding_lidar/motion_window.hpp
+ * @brief 角速度の区分積分と、時間・旋回量・点数に基づく点群保持上限を管理する。
+ */
+
+/** @file src/motion_cloud_assembler.cpp
+ * @brief 計測時刻のTFで点群を蓄積し、照合用点群と欠測・遅延の診断を配信する。
+ */
+
+/** @file launch/matching_cloud_launch.py
+ * @brief 実機・シミュレーション共通の点群蓄積ノードを起動する。
+ */
+
+/** @file test/test_motion_window.cpp
+ * @brief 左右切返し・角速度欠測・蓄積時間・点数の上限を検証する。
+ */
+
+/** @file test/test_motion_cloud_ros.py
+ * @brief 独立したROS環境で点群の座標・時刻、TF欠測、時計逆行を検証する。
+ */
+
+/** @section motion_config 共通点群蓄積の設定
+ * config/motion_cloud.yaml は、保持時間・旋回量・点数・出力頻度の初期値を定義する。
+ */

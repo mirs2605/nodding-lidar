@@ -1,0 +1,31 @@
+# パッケージのルートで doxygen Doxyfile を実行する。
+PROJECT_NAME = "nodding_lidar"
+OUTPUT_DIRECTORY = docs/generated
+OUTPUT_LANGUAGE = Japanese
+INPUT_ENCODING = UTF-8
+INPUT = "include/nodding_lidar/motion_window.hpp" "src/motion_cloud_assembler.cpp" "launch/matching_cloud_launch.py" "test/test_motion_window.cpp" "test/test_motion_cloud_ros.py" "docs/doxygen.dox" "docs/MOTION_LOCALIZATION_DESIGN.md" "include/nodding_lidar/geometry.hpp" "include/nodding_lidar/pca9685.hpp" "launch/bringup_launch.py" "launch/lidar_launch.py" "launch/nav_launch.py" "launch/slam_launch.py" "launch/standalone_slam_launch.py" "src/laser_scan.cpp" "src/scan_to_cloud_node.cpp" "src/serial_angle_bridge.cpp" "src/servo_node.cpp" "src/servo_tf_node.cpp" "test/test_geometry.cpp" "test/test_laser_projection.cpp"
+FILE_PATTERNS = *.dox *.c *.cc *.cpp *.h *.hpp *.ino *.py *.java
+EXTENSION_MAPPING = ino=C++
+RECURSIVE = NO
+EXAMPLE_PATH = .
+EXAMPLE_RECURSIVE = YES
+EXTRACT_ALL = YES
+EXTRACT_STATIC = YES
+EXTRACT_PRIVATE = NO
+SOURCE_BROWSER = YES
+INLINE_SOURCES = NO
+STRIP_FROM_PATH = .
+FULL_PATH_NAMES = YES
+PYTHON_DOCSTRING = NO
+GENERATE_HTML = YES
+GENERATE_LATEX = NO
+GENERATE_XML = NO
+HAVE_DOT = NO
+QUIET = YES
+WARNINGS = YES
+WARN_IF_UNDOCUMENTED = NO
+WARN_AS_ERROR = YES
+WARN_LOGFILE = docs/generated/warnings.log
+
+# 他の資料とブラウザのメニュー設定を共有しない。
+HTML_PROJECT_COOKIE = mirs_docs_nodding_lidar_v2

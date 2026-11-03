@@ -16,23 +16,24 @@ servo_tf_node:
     joint_name: nodding_joint
     parent_frame: servo_link
     child_frame: laser
-    lidar_height: 0.04505      # 回転軸からLiDARのセンサ原点までの高さ [m]
+    lidar_height: 0.0325       # 回転軸からLiDARのセンサ原点までの高さ [m] (32.5mm)
     state_timeout_sec: 0.5
 
 scan_to_cloud:
   ros__parameters:
     scan_topic: /scan
+    servo_state_topic: /servo_state
+    servo_parent_frame: servo_link
+    lidar_height: 0.0325
     cloud_topic: /points
     output_frame: base_link
-    fixed_frame: odom          # 蓄積中のロボット移動を補正する固定フレーム
+    fixed_frame: odom          # スキャン中のロボット移動を補正する固定フレーム
     lidar_frame: ""            # 空なら /scan の header.frame_id を使う
 
-    frames_per_cloud: 15       # 複数スキャンを蓄積して3D点群にする
-    tf_timeout: 0.15           # 必要時刻のTFを待つ上限 [秒]
+    tf_timeout: 0.3            # スキャン終了後の角度・TFサンプル到着を待つ上限 [秒]
     tf_cache_sec: 5.0          # TFの保持時間 [秒]
 
-    default_scan_time: 0.0667  # /scan の scan_time が0のときの代用値 [秒]
+    default_scan_time: 0.1     # S1の /scan の scan_time が0のときの代用値 [秒]
     stamp_is_scan_end: false   # 【要確認】header.stamp がスキャン終了時刻なら true
     reverse_time_order: false  # 【要確認】配列の向きと時刻の進む向きが逆なら true
-    max_frame_duration: 2.0    # フレームが途切れたと判断する時間 [秒]
     reliable_output: true

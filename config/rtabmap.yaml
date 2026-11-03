@@ -1,0 +1,24 @@
+# Shared by slam_launch.py and bringup_launch.py.
+# RTAB-Map library parameters must be strings; ROS wrapper parameters are typed.
+rtabmap:
+  ros__parameters:
+    frame_id: base_link
+    # Empty: synchronize the EKF odometry topic, including its covariance.
+    odom_frame_id: ""
+    odom_frame_id_init: odom
+    map_frame_id: map
+    publish_tf: true
+    subscribe_odom: true
+    subscribe_scan_cloud: true
+    subscribe_rgb: false
+    subscribe_depth: false
+    subscribe_rgbd: false
+    approx_sync: true
+    wait_for_transform: 0.2
+    Reg/Strategy: "1"
+    Reg/Force3DoF: "false"
+    Grid/FromDepth: "false"
+    Grid/3D: "true"
+    # LiDAR-only loop closure uses spatial proximity rather than visual features.
+    RGBD/ProximityBySpace: "true"
+    RGBD/ProximityPathMaxNeighbors: "10"
